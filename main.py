@@ -1,4 +1,5 @@
 import json
+import io
 from typing import Annotated
 from typing_extensions import TypedDict
 from langchain.chat_models import init_chat_model
@@ -7,13 +8,24 @@ from langchain_core.messages import ToolMessage, HumanMessage
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 
+from IPython.display import Image, display
+from PIL import Image as PILImage
 
-from dotenv import load_dotenv
-load_dotenv()
+from dotenv import load_dotenv, find_dotenv
+load_dotenv(find_dotenv())
 
 # This is a different way to specify the model. This is a dictionary
 # in the past I have used model="gpt4o-mini"
 llm = init_chat_model("openai:gpt-4o-mini")
+
+def draw_graph(graph):
+    try:
+        img_data = graph.get_graph().draw_mermaid_png()
+        image = PILImage.open(io.BytesIO(img_data))
+        image.show()
+    except Exception:
+        # This requires some extra dependencies and is optional
+            pass
 
 
 tool = TavilySearch(max_results=2)
@@ -76,7 +88,7 @@ def route_tools(state: State,):
         print("No messages found in input")
         return END
     ai_message = messages[-1]
-    if hasattr(ai_message, "tool_calls") and len(ai_message.tool) > 0:
+    if hasattr(ai_message, "tool_calls") and len(ai_message.tool_calls) > 0:
         return "tools"
     return END
 
@@ -100,17 +112,31 @@ graph_builder.add_edge("tools", "chatbot")
 graph_builder.add_edge(START, "chatbot")
 graph = graph_builder.compile()
 
-
-
-
-
-
-
-
-
+def stream_graph_updates(user_input: str):
+    for event in graph.stream({"messages": [{"role": "user", "content": user_input}]}):
+        for value in event.values():
+            print("Assistant:", value["messages"][-1].content)
 
 def main():
-    print("Hello from lg-add-tools!")
+    while True:
+        try:
+            user_input = input("User: ")
+            if user_input.lower() in ["quit", "exit", "q"]:
+                print("Goodbye!")
+                break
+            elif user_input.lower() in ["draw", "graph", "show"]:
+                draw_graph(graph)
+                continue
+                
+            stream_graph_updates(user_input)
+        except:
+            # fallback if input() is not available
+            user_input = "What do you know about LangGraph?"
+            print("User: " + user_input)
+            stream_graph_updates(user_input)
+            break
+
+
 
 if __name__ == "__main__":
     main()
